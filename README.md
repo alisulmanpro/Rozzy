@@ -85,6 +85,7 @@ rozzy/
 ├── nlu/        Python package + scripts: data generator, training, evaluation, the model file
 ├── backend/    FastAPI server that wraps the model
 ├── mobile/     Expo app source (src/); see mobile/README.md to create the Expo project
+├── design/     Phase 1 screen designs (PNG previews + HTML), see design/README.md
 └── docs/       ARCHITECTURE.md, API.md, NLU.md, ROADMAP.md
 ```
 

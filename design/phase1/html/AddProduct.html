@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>Rozzy add product</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F7F5FF; display: flex; flex-direction: column; font-family: Inter, sans-serif; color: #14123A; position: relative">
+<div style="padding: 52px 16px 0; display: flex; align-items: center; gap: 8px">
+<button aria-label="Back" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#14123A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+<h1 style="margin: 0; flex: 1; font-family: Poppins, sans-serif; font-weight: 700; font-size: 22px">Nayi cheez</h1>
+</div>
+<div style="padding: 8px 20px 0; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="pn" style="font-size: 14px; font-weight: 500; color: #4A4770">Cheez ka naam</label>
+<input id="pn" type="text" value="Ilachi" style="height: 54px; border: 1.5px solid #7B2CF5; border-radius: 14px; background: #FFFFFF; padding: 0 16px; font-family: Inter, sans-serif; font-size: 17px; color: #14123A; outline: 0">
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 14px; font-weight: 500; color: #4A4770">Kis cheez se bechte hain?</span>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="height: 40px; padding: 0 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #D9D3F0; font-size: 15px; display: flex; align-items: center">kg</span>
+<span style="height: 40px; padding: 0 16px; border-radius: 20px; background: #7B2CF5; color: #FFFFFF; font-size: 15px; font-weight: 600; display: flex; align-items: center">gram</span>
+<span style="height: 40px; padding: 0 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #D9D3F0; font-size: 15px; display: flex; align-items: center">litre</span>
+<span style="height: 40px; padding: 0 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #D9D3F0; font-size: 15px; display: flex; align-items: center">dozen</span>
+<span style="height: 40px; padding: 0 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #D9D3F0; font-size: 15px; display: flex; align-items: center">piece</span>
+<span style="height: 40px; padding: 0 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #D9D3F0; font-size: 15px; display: flex; align-items: center">packet</span>
+<span style="height: 40px; padding: 0 16px; border-radius: 20px; background: #FFFFFF; border: 1px solid #D9D3F0; font-size: 15px; display: flex; align-items: center">pao</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="pp" style="font-size: 14px; font-weight: 500; color: #4A4770">Rate (1 gram ka)</label>
+<div style="display: flex; align-items: center; background: #FFFFFF; border: 1px solid #D9D3F0; border-radius: 14px; height: 54px; overflow: hidden">
+<span style="padding: 0 14px; font-size: 16px; font-weight: 600; border-right: 1px solid #E8E4F7; height: 100%; display: flex; align-items: center">Rs</span>
+<input id="pp" type="text" value="9" style="flex: 1; border: 0; outline: 0; background: transparent; font-family: Inter, sans-serif; font-size: 17px; padding: 0 14px; color: #14123A; min-width: 0">
+<span style="padding: 0 14px; font-size: 14px; color: #5E5B82">per gram</span>
+</div>
+<span style="font-size: 13px; color: #5E5B82">Agar rate nahi bataya to Rozzy bill mein aap se poochay ga.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 14px; font-weight: 500; color: #4A4770">Bolne ke alfaz (Rozzy inhein pehchane ga)</span>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="height: 38px; padding: 0 14px; border-radius: 19px; background: #F0E8FF; color: #4B12B8; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px">ilachi <span aria-hidden="true">×</span></span>
+<span style="height: 38px; padding: 0 14px; border-radius: 19px; background: #F0E8FF; color: #4B12B8; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px">elaichi <span aria-hidden="true">×</span></span>
+<span style="height: 38px; padding: 0 14px; border-radius: 19px; background: #FFFFFF; border: 1.5px dashed #9B7BE0; color: #4B12B8; font-size: 15px; font-weight: 600; display: flex; align-items: center">+ Aur alfaz</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="st" style="font-size: 14px; font-weight: 500; color: #4A4770">Stock abhi kitna hai (optional)</label>
+<input id="st" type="text" value="500" style="height: 54px; border: 1px solid #D9D3F0; border-radius: 14px; background: #FFFFFF; padding: 0 16px; font-family: Inter, sans-serif; font-size: 17px; color: #14123A; outline: 0">
+</div>
+</div>
+<div style="position: absolute; left: 20px; right: 20px; bottom: 28px; display: flex; gap: 10px">
+<button style="flex: 1; height: 56px; border: 1.5px solid #D9D3F0; border-radius: 14px; background: #FFFFFF; color: #14123A; font-family: Poppins, sans-serif; font-weight: 600; font-size: 16px">Cancel</button>
+<button style="flex: 1.6; height: 56px; border: 0; border-radius: 14px; background: #7B2CF5; color: #FFFFFF; font-family: Poppins, sans-serif; font-weight: 600; font-size: 17px">Save karein</button>
+</div>
+</div>
+</body>
+</html>
