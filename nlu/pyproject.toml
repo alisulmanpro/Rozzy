@@ -1,0 +1,16 @@
+[project]
+name = "rozzy-nlu"
+version = "0.2.0"
+description = "Roman Urdu / Roman Punjabi shopkeeper-sentence parser (text -> structured billing items)"
+requires-python = ">=3.11"
+dependencies = ["scikit-learn==1.9.1", "numpy", "joblib"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
