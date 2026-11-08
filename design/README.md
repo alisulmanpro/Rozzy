@@ -3,7 +3,7 @@
 ## Phase 1 screens (11 screens, light theme)
 
 Preview images are in `design/phase1/png/` (390 x 844, phone size). Static HTML of each screen is in `design/phase1/html/`
-(open the file in a browser; width 390px). The logo is `design/phase1/assets/rozzy-logo.png`.
+(open the file in a browser; width 390px). Logos: `design/phase1/assets/rozzy-logo.png` (navy square tile, used in the app screens) and `design/phase1/assets/rozzy-logo-full.png` (full-size logo on white).
 
 | # | Screen | Image |
 |---|---|---|
