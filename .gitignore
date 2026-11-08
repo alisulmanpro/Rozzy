@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+# Node / Expo
+node_modules/
+.expo/
+dist/
+mobile-app/node_modules/
+# Env / secrets
+.env
+.env.*
+!.env.example
+# Big generated data (regenerate with nlu/scripts/generate_data.py)
+nlu/data/Train.csv
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
