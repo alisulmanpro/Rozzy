@@ -1,0 +1,200 @@
+import { useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@react-native-vector-icons/ionicons';
+import { router } from 'expo-router';
+
+import Screen from '@/shared/components/Screen';
+import SearchBar from '@/shared/components/SearchBar';
+import { products } from '@/shared/data/products';
+import type { Product } from '@/shared/data/products';
+import {
+  colors,
+  fonts,
+  fontSizes,
+  fontWeights,
+  radii,
+  spacing,
+} from '@/shared/theme';
+
+export default function ProductsScreen() {
+  const [query, setQuery] = useState('');
+
+  const filteredProducts = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return products;
+    }
+    return products.filter(
+      (product) =>
+        product.name.toLowerCase().includes(normalized) ||
+        product.aliases.some((alias) => alias.includes(normalized)),
+    );
+  }, [query]);
+
+  return (
+    <Screen edges={['top']}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Products</Text>
+        <Text style={styles.count}>{`${products.length} cheezein`}</Text>
+      </View>
+
+      <FlatList
+        data={filteredProducts}
+        keyExtractor={(item) => item.id}
+        keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={<Text style={styles.empty}>Kuch nahi mila.</Text>}
+        ListHeaderComponent={
+          <View>
+            <SearchBar placeholder="Cheez dhoondein" value={query} onChangeText={setQuery} />
+            <View style={styles.listTopGap} />
+          </View>
+        }
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => <ProductCard product={item} />}
+        showsVerticalScrollIndicator={false}
+      />
+
+      <Pressable
+        onPress={() => router.push('/add-product')}
+        accessibilityRole="button"
+        accessibilityLabel="Nayi cheez"
+        style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
+      >
+        <Ionicons name="add" size={20} color={colors.white} />
+        <Text style={styles.fabLabel}>Nayi cheez</Text>
+      </Pressable>
+    </Screen>
+  );
+}
+
+function ProductCard({ product }: { product: Product }) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardDetails}>
+        <Text style={styles.cardName}>{product.name}</Text>
+        <Text style={styles.cardAliases}>{`Bolne ke alfaz: ${product.aliases.join(', ')}`}</Text>
+      </View>
+      <View style={styles.cardPricing}>
+        <Text style={styles.cardPrice}>{`Rs ${product.price}`}</Text>
+        <Text style={styles.cardUnit}>{`per ${product.unit}`}</Text>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+  },
+
+  title: {
+    color: colors.ink,
+    fontFamily: fonts.heading,
+    fontSize: fontSizes.title,
+    fontWeight: fontWeights.bold,
+  },
+
+  count: {
+    color: colors.textCaption,
+    fontFamily: fonts.body,
+    fontSize: fontSizes.small,
+  },
+
+  listContent: {
+    paddingBottom: 100,
+  },
+
+  listTopGap: {
+    height: spacing.md,
+  },
+
+  empty: {
+    color: colors.textCaption,
+    fontFamily: fonts.body,
+    fontSize: fontSizes.body,
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+
+  card: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: colors.borderCard,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md + 2,
+  },
+
+  cardDetails: {
+    flex: 1,
+    gap: 3,
+  },
+
+  cardName: {
+    color: colors.ink,
+    fontFamily: fonts.body,
+    fontSize: fontSizes.bodyLarge,
+    fontWeight: fontWeights.semibold,
+  },
+
+  cardAliases: {
+    color: colors.textCaption,
+    fontFamily: fonts.body,
+    fontSize: 12,
+  },
+
+  cardPricing: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+
+  cardPrice: {
+    color: colors.ink,
+    fontFamily: fonts.heading,
+    fontSize: fontSizes.bodyLarge,
+    fontWeight: fontWeights.semibold,
+  },
+
+  cardUnit: {
+    color: colors.textCaption,
+    fontFamily: fonts.body,
+    fontSize: 12,
+  },
+
+  fab: {
+    alignItems: 'center',
+    backgroundColor: colors.violet,
+    borderRadius: 28,
+    bottom: spacing.xl,
+    elevation: 10,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    height: 56,
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+    position: 'absolute',
+    right: spacing.xl,
+    shadowColor: colors.violet,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+  },
+
+  fabLabel: {
+    color: colors.white,
+    fontFamily: fonts.heading,
+    fontSize: fontSizes.bodyLarge,
+    fontWeight: fontWeights.semibold,
+  },
+
+  pressed: {
+    opacity: 0.85,
+  },
+});
