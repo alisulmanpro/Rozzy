@@ -1,0 +1,220 @@
+
+import { useEffect, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+
+type EnergyCoreProps = {
+  audioLevel: number;
+  isListening: boolean;
+};
+
+const SIZE = 340;
+
+export default function EnergyCore({
+  audioLevel,
+  isListening,
+}: EnergyCoreProps) {
+  const [pulse] = useState(() => new Animated.Value(1));
+  const [energy] = useState(() => new Animated.Value(0));
+
+  const level = Math.max(0, Math.min(1, audioLevel));
+  const activeLevel = isListening ? level : 0;
+
+  useEffect(() => {
+    Animated.spring(energy, {
+      toValue: activeLevel,
+      speed: 18,
+      bounciness: 5,
+      useNativeDriver: true,
+    }).start();
+  }, [activeLevel, energy]);
+
+  useEffect(() => {
+    if (!isListening) {
+      pulse.stopAnimation();
+      Animated.spring(pulse, {
+        toValue: 1,
+        speed: 14,
+        bounciness: 3,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.035,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [isListening, pulse]);
+
+  const energyScale = energy.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.13],
+  });
+
+  const glowOpacity = energy.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.35, 0.9],
+  });
+
+  const ringScale = energy.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.2],
+  });
+
+  return (
+    <View style={styles.container}>
+      <Animated.View
+        style={[
+          styles.outerGlow,
+          {
+            opacity: glowOpacity,
+            transform: [{ scale: ringScale }],
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.outerRing,
+          {
+            transform: [{ scale: ringScale }],
+            opacity: glowOpacity,
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.orb,
+          {
+            transform: [
+              { scale: Animated.multiply(pulse, energyScale) },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['#35B9FF', '#7136F5', '#310B91', '#10052F']}
+          locations={[0, 0.28, 0.7, 1]}
+          start={{ x: 0.12, y: 0.08 }}
+          end={{ x: 0.88, y: 0.95 }}
+          style={styles.sphere}
+        >
+          <View style={styles.highlight} />
+          <View style={styles.innerGlow} />
+          <View style={styles.core} />
+        </LinearGradient>
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.waveRing,
+          {
+            opacity: glowOpacity,
+            transform: [{ scale: ringScale }],
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    width: SIZE,
+    height: SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outerGlow: {
+    position: 'absolute',
+    width: 270,
+    height: 270,
+    borderRadius: 135,
+    backgroundColor: '#702BFF',
+    shadowColor: '#7B2CF5',
+    shadowOpacity: 0.9,
+    shadowRadius: 55,
+    elevation: 20,
+  },
+  outerRing: {
+    position: 'absolute',
+    width: 285,
+    height: 285,
+    borderRadius: 143,
+    borderWidth: 2,
+    borderColor: '#8A4CFF',
+  },
+  orb: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    overflow: 'hidden',
+    shadowColor: '#8A36FF',
+    shadowOpacity: 0.8,
+    shadowRadius: 35,
+    elevation: 22,
+  },
+  sphere: {
+    flex: 1,
+    borderRadius: 110,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  highlight: {
+    position: 'absolute',
+    width: 100,
+    height: 65,
+    borderRadius: 50,
+    top: 23,
+    left: 27,
+    backgroundColor: 'rgba(151, 207, 255, 0.28)',
+    transform: [{ rotate: '-35deg' }],
+  },
+  innerGlow: {
+    position: 'absolute',
+    width: 165,
+    height: 165,
+    borderRadius: 83,
+    backgroundColor: 'rgba(112, 49, 255, 0.28)',
+  },
+  core: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(28, 9, 88, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(183, 158, 255, 0.25)',
+  },
+  waveRing: {
+    position: 'absolute',
+    width: 315,
+    height: 315,
+    borderRadius: 158,
+    borderWidth: 1,
+    borderColor: 'rgba(69, 196, 255, 0.65)',
+  },
+});

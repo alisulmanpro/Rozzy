@@ -1,0 +1,89 @@
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+
+export default function ExpoGoVoiceScreen() {
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        <Text style={styles.icon}>🎙️</Text>
+
+        <Text style={styles.title}>ROZZY Voice Assistant</Text>
+
+        <Text style={styles.description}>
+          Voice recognition is not available in Expo Go.
+        </Text>
+
+        <Text style={styles.detail}>
+          The complete voice feature is preserved and will be available
+          in ROZZY's custom Android build. You can continue testing the
+          other app features in Expo Go.
+        </Text>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.back()}
+          style={({ pressed }) => [
+            styles.button,
+            pressed && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.buttonText}>Go Back</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    backgroundColor: '#080522',
+    flex: 1,
+  },
+  container: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  icon: {
+    fontSize: 58,
+    marginBottom: 24,
+  },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 25,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  description: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  detail: {
+    color: '#C7C3DC',
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  button: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginTop: 32,
+    paddingHorizontal: 36,
+    paddingVertical: 14,
+  },
+  buttonPressed: {
+    opacity: 0.8,
+  },
+  buttonText: {
+    color: '#080522',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+});
