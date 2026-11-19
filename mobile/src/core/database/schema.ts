@@ -1,4 +1,4 @@
-export const DATABASE_VERSION = 1;
+export const DATABASE_VERSION = 2;
 
 export const INITIAL_SCHEMA_SQL = `
 CREATE TABLE shops (
@@ -34,7 +34,7 @@ CREATE TABLE products (
   barcode TEXT,
   unit TEXT NOT NULL,
   price_paisa INTEGER NOT NULL CHECK (price_paisa >= 0),
-  stock_quantity REAL NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
+  stock_quantity REAL NOT NULL DEFAULT 0,
   low_stock_threshold REAL NOT NULL DEFAULT 0 CHECK (low_stock_threshold >= 0),
   is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
   created_at TEXT NOT NULL,
@@ -113,6 +113,26 @@ CREATE TABLE bill_items (
     REFERENCES products(id, shop_id) ON DELETE RESTRICT
 );
 
+CREATE TABLE stock_movements (
+  id TEXT PRIMARY KEY NOT NULL,
+  shop_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  bill_id TEXT,
+  movement_type TEXT NOT NULL CHECK (
+    movement_type IN ('sale', 'restock', 'adjustment', 'return')
+  ),
+  quantity REAL NOT NULL,
+  previous_stock REAL NOT NULL,
+  resulting_stock REAL NOT NULL,
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id, shop_id)
+    REFERENCES products(id, shop_id) ON DELETE CASCADE,
+  FOREIGN KEY (bill_id)
+    REFERENCES bills(id) ON DELETE SET NULL
+);
+
 CREATE TABLE customer_ledger (
   id TEXT PRIMARY KEY NOT NULL,
   shop_id TEXT NOT NULL,
@@ -150,6 +170,12 @@ CREATE INDEX idx_bill_items_bill
 
 CREATE INDEX idx_bill_items_shop
   ON bill_items(shop_id);
+
+CREATE INDEX idx_stock_movements_product
+  ON stock_movements(shop_id, product_id, created_at);
+
+CREATE INDEX idx_stock_movements_bill
+  ON stock_movements(bill_id);
 
 CREATE INDEX idx_customer_ledger_customer
   ON customer_ledger(shop_id, customer_id, created_at);

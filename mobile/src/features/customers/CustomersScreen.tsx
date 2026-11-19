@@ -66,7 +66,7 @@ export default function CustomersScreen() {
   );
 
   const udhaarTotal = customers.reduce(
-    (sum, customer) => sum + customer.outstanding,
+    (sum, customer) => sum + Math.max(0, customer.outstanding),
     0,
   );
 
@@ -197,10 +197,27 @@ export default function CustomersScreen() {
                 </View>
 
                 <View style={styles.balance}>
-                  <Text style={styles.balanceAmount}>
-                    {formatMoney(customer.outstanding)}
+                  <Text
+                    style={[
+                      styles.balanceAmount,
+                      customer.outstanding <= 0 && styles.balanceAmountGreen,
+                    ]}
+                  >
+                    {formatMoney(Math.abs(customer.outstanding))}
                   </Text>
-                  <Text style={styles.balanceLabel}>Udhaar</Text>
+                  <Text
+                    style={[
+                      styles.balanceLabel,
+                      customer.outstanding < 0 && styles.balanceLabelAdvance,
+                      customer.outstanding === 0 && styles.balanceLabelZero,
+                    ]}
+                  >
+                    {customer.outstanding > 0
+                      ? 'Udhaar'
+                      : customer.outstanding < 0
+                        ? 'Advance'
+                        : 'Bebaak'}
+                  </Text>
                 </View>
               </Pressable>
             ))}
@@ -347,11 +364,23 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.semibold,
   },
 
+  balanceAmountGreen: {
+    color: '#15803D',
+  },
+
   balanceLabel: {
     color: colors.orangeText,
     fontFamily: fonts.body,
     fontSize: 12,
     fontWeight: fontWeights.semibold,
+  },
+
+  balanceLabelAdvance: {
+    color: '#15803D',
+  },
+
+  balanceLabelZero: {
+    color: '#15803D',
   },
 
   message: {

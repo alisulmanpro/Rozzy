@@ -14,6 +14,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Badge from '@/shared/components/Badge';
 import EnergyCore from './components/EnergyCore';
 import VoiceTestingPanel from './components/VoiceTestingPanel';
+import { parseSentence } from '@/api';
+import { listProducts, type ProductRecord } from '@/core/database/repositories/productRepository';
+import { matchParsedItemToProduct, normalizeName } from '@/shared/utils/productMatcher';
+import { setPendingCartItems, clearPendingCartItems, type PendingCartItem } from '@/shared/utils/pendingCartBridge';
 import {
   colors,
   fonts,
@@ -30,13 +34,21 @@ export default function VoiceScreen() {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false);
+  const [isProcessingNlu, setIsProcessingNlu] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [transcript, setTranscript] = useState('');
   const [message, setMessage] = useState('');
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
 
   const pendingReplyRef = useRef<string | null>(null);
+  const isProcessingRef = useRef<boolean>(false);
+  const lastProcessedTranscriptRef = useRef<string>('');
   const femaleVoiceRef = useRef<FemaleVoice | null>(null);
+
+  // Clarification state machine: stores candidates from an ambiguous match
+  // so the merchant's next reply can be resolved against them.
+  const pendingClarificationCandidatesRef = useRef<ProductRecord[] | null>(null);
+  const pendingClarificationQtyRef = useRef<number>(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,15 +82,14 @@ export default function VoiceScreen() {
     };
   }, []);
 
-  const speakReply = async (recognizedText: string) => {
-    setMessage('Rozzy jawab tayyar kar rahi hai…');
-
+  const speakFemaleTTS = async (text: string, onFinish?: () => void) => {
     try {
       let selectedVoice = femaleVoiceRef.current;
 
       if (!selectedVoice) {
         const voices = await Speech.getAvailableVoicesAsync();
 
+        // Strict Female Urdu/Hindi TTS logic (never fall back to male voice)
         selectedVoice =
           voices.find(
             (voice) =>
@@ -93,15 +104,11 @@ export default function VoiceScreen() {
         setMessage(
           'Phone par verified female Urdu/Hindi voice nahi mili. Android Text-to-speech settings mein female voice install karein.',
         );
+        if (onFinish) onFinish();
         return;
       }
 
-      const reply =
-        'Ji, main ne aapki baat sun li. Abhi main voice testing mode mein hoon.';
-
-      setMessage('');
-
-      Speech.speak(reply, {
+      Speech.speak(text, {
         voice: selectedVoice.identifier,
         language: selectedVoice.language,
         pitch: 1,
@@ -113,6 +120,7 @@ export default function VoiceScreen() {
         onDone: () => {
           setIsAssistantSpeaking(false);
           setAudioLevel(0);
+          if (onFinish) onFinish();
         },
         onStopped: () => {
           setIsAssistantSpeaking(false);
@@ -122,12 +130,180 @@ export default function VoiceScreen() {
           setIsAssistantSpeaking(false);
           setAudioLevel(0);
           setMessage('Rozzy ki voice play nahi ho saki.');
+          if (onFinish) onFinish();
         },
       });
     } catch {
       setIsAssistantSpeaking(false);
       setAudioLevel(0);
       setMessage('Phone ki text-to-speech service available nahi hai.');
+      if (onFinish) onFinish();
+    }
+  };
+
+  /**
+   * Resolves a clarification reply against a list of candidate products.
+   * Uses word-overlap between the merchant's reply and each candidate's name/aliases.
+   * Returns the unique matched product, or null if 0 or 2+ candidates match.
+   */
+  const resolveClarificationReply = (
+    reply: string,
+    candidates: ProductRecord[],
+  ): ProductRecord | null => {
+    const normReply = normalizeName(reply);
+    const matches = candidates.filter((c) => {
+      const nameWords = normalizeName(c.name).split(' ');
+      if (nameWords.some((w) => w.length > 2 && normReply.includes(w))) return true;
+      return c.aliases.some((a) => {
+        const aWords = normalizeName(a).split(' ');
+        return aWords.some((w) => w.length > 2 && normReply.includes(w));
+      });
+    });
+    return matches.length === 1 ? matches[0] : null;
+  };
+
+  /**
+   * Processes the final transcript through NLU, product matching, and cart bridging.
+   */
+  const processFinalTranscript = async (finalText: string) => {
+    const trimmed = finalText.trim();
+    if (!trimmed) return;
+
+    // Deduplication check: prevent processing identical transcripts in the same session.
+    // Exception: if a clarification is pending, the reply MUST be processed even if it
+    // looks identical to the previous transcript (edge case: merchant says the same word twice).
+    if (isProcessingRef.current) return;
+    if (!pendingClarificationCandidatesRef.current && lastProcessedTranscriptRef.current === trimmed) {
+      return;
+    }
+
+    isProcessingRef.current = true;
+    lastProcessedTranscriptRef.current = trimmed;
+    setIsProcessingNlu(true);
+
+    // ── CLARIFICATION RESOLUTION PATH ────────────────────────────────────────
+    // If there is a pending ambiguous clarification, try to resolve the merchant's
+    // reply against the stored candidate list WITHOUT calling the NLU backend.
+    if (pendingClarificationCandidatesRef.current) {
+      const candidates = pendingClarificationCandidatesRef.current;
+      const resolvedProduct = resolveClarificationReply(trimmed, candidates);
+
+      if (resolvedProduct) {
+        // Merchant's reply identified a unique product → stage it
+        pendingClarificationCandidatesRef.current = null;
+        const qty = pendingClarificationQtyRef.current;
+        const pendingItem: PendingCartItem = {
+          product: resolvedProduct,
+          quantity: qty,
+          unitPrice: resolvedProduct.price,
+        };
+        await setPendingCartItems([pendingItem]);
+
+        const confirmMsg = `${qty} ${resolvedProduct.unit} ${resolvedProduct.name} bill mein shaamil kar diya.`;
+        setMessage(confirmMsg);
+        await speakFemaleTTS(confirmMsg, () => {
+          router.navigate('/bill');
+        });
+      } else {
+        // Could not resolve uniquely → ask again
+        const candidateNames = candidates.map((c) => c.name).join(' ya ');
+        const retryMsg = `Samajh nahi aayi. Baraye meherbani batayein: ${candidateNames}?`;
+        setMessage(retryMsg);
+        await speakFemaleTTS(retryMsg);
+        // Keep pendingClarificationCandidatesRef set so the next reply is also resolved here
+      }
+
+      setIsProcessingNlu(false);
+      isProcessingRef.current = false;
+      return;
+    }
+    // ── END CLARIFICATION RESOLUTION ─────────────────────────────────────────
+
+    setMessage('NLU process ho raha hai…');
+
+    try {
+      // 1. Call existing FastAPI /parse endpoint
+      const parseResult = await parseSentence(trimmed);
+
+      if (!parseResult.items || parseResult.items.length === 0) {
+        setMessage('Koi cheez samajh nahi aayi. Baraye meherbani dobara batayein.');
+        await speakFemaleTTS('Koi cheez samajh nahi aayi. Baraye meherbani dobara batayein.');
+        setIsProcessingNlu(false);
+        isProcessingRef.current = false;
+        return;
+      }
+
+      // 2. Fetch active SQLite catalogue for product matching
+      const catalogue: ProductRecord[] = await listProducts('');
+
+      const matchedPendingItems: PendingCartItem[] = [];
+      const clarifications: string[] = [];
+      // Track the first ambiguous result so we can store its candidates for the next turn
+      let firstAmbiguousResult: ReturnType<typeof matchParsedItemToProduct> | null = null;
+
+      for (const item of parseResult.items) {
+        const matchRes = matchParsedItemToProduct(item, catalogue);
+
+        if (matchRes.status === 'exact' && matchRes.product) {
+          matchedPendingItems.push({
+            product: matchRes.product,
+            quantity: matchRes.matchedQuantity,
+            unitPrice: matchRes.product.price,
+          });
+        } else if (matchRes.clarificationMessage) {
+          clarifications.push(matchRes.clarificationMessage);
+          if (matchRes.status === 'ambiguous' && !firstAmbiguousResult) {
+            firstAmbiguousResult = matchRes;
+          }
+        }
+      }
+
+      // 3. Handle clarifications vs successful cart addition
+      if (clarifications.length > 0) {
+        const clarificationText = clarifications.join(' Aur ');
+        setMessage(clarificationText);
+        // If the first issue was ambiguous, store candidates so the next turn resolves it
+        if (firstAmbiguousResult && firstAmbiguousResult.candidateProducts.length > 1) {
+          pendingClarificationCandidatesRef.current = firstAmbiguousResult.candidateProducts;
+          // Store the quantity from the parsed item (default 1 if not present)
+          pendingClarificationQtyRef.current = parseResult.items[0]?.qty ?? 1;
+          // Reset dedup so the follow-up reply is not blocked
+          lastProcessedTranscriptRef.current = '';
+        }
+        // Ask clarification via female TTS, then wait for merchant's next turn
+        await speakFemaleTTS(clarificationText);
+        setIsProcessingNlu(false);
+        isProcessingRef.current = false;
+        return;
+      }
+
+      if (matchedPendingItems.length > 0) {
+        // Safe staging: populate bridge so BillScreen will import into cart for merchant review
+        await setPendingCartItems(matchedPendingItems);
+
+        const summaryNames = matchedPendingItems
+          .map((i) => `${i.quantity} ${i.product.unit} ${i.product.name}`)
+          .join(', ');
+
+        const confirmMsg = `${summaryNames} bill mein shaamil kar diye hain. Bill screen par check karein.`;
+        setMessage(confirmMsg);
+
+        // Speak confirmation then transition to BillScreen for merchant review
+        await speakFemaleTTS(confirmMsg, () => {
+          router.navigate('/bill');
+        });
+      } else {
+        const noMatchMsg = 'Koi product match nahi hua. Baraye meherbani dobara batayein.';
+        setMessage(noMatchMsg);
+        await speakFemaleTTS(noMatchMsg);
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'NLU backend tak rasai nahi ho saki.';
+      setMessage(`Masla: ${errMsg}. Likh kar bill banayein.`);
+      await speakFemaleTTS('NLU backend se rabta nahi ho saka. Likh kar bill banayein.');
+    } finally {
+      setIsProcessingNlu(false);
+      isProcessingRef.current = false;
     }
   };
 
@@ -142,10 +318,9 @@ export default function VoiceScreen() {
     setAudioLevel(0);
 
     const pendingText = pendingReplyRef.current;
-
     if (pendingText) {
       pendingReplyRef.current = null;
-      void speakReply(pendingText);
+      void processFinalTranscript(pendingText);
     }
   });
 
@@ -173,6 +348,7 @@ export default function VoiceScreen() {
     if (text) {
       setTranscript(text);
 
+      // Only process when transcript is marked FINAL
       if (event.isFinal && !pendingReplyRef.current) {
         pendingReplyRef.current = text;
         ExpoSpeechRecognitionModule.stop();
@@ -197,7 +373,7 @@ export default function VoiceScreen() {
   });
 
   const handleMicrophonePress = async () => {
-    if (isStarting || isAssistantSpeaking) return;
+    if (isStarting || isAssistantSpeaking || isProcessingNlu) return;
 
     if (isRecognizing) {
       ExpoSpeechRecognitionModule.stop();
@@ -252,6 +428,11 @@ export default function VoiceScreen() {
 
   const handleClose = () => {
     pendingReplyRef.current = null;
+    isProcessingRef.current = false;
+    pendingClarificationCandidatesRef.current = null;
+    pendingClarificationQtyRef.current = 1;
+    // Cancellation safety: ensure no pending items are staged
+    void clearPendingCartItems();
     Speech.stop();
 
     if (isRecognizing) {
@@ -263,6 +444,9 @@ export default function VoiceScreen() {
 
   const handleKeyboard = () => {
     pendingReplyRef.current = null;
+    isProcessingRef.current = false;
+    pendingClarificationCandidatesRef.current = null;
+    pendingClarificationQtyRef.current = 1;
     Speech.stop();
 
     if (isRecognizing) {
@@ -274,15 +458,17 @@ export default function VoiceScreen() {
 
   const statusText = isStarting
     ? 'Microphone tayyar ho raha hai…'
-    : isAssistantSpeaking
-      ? 'Main jawab de rahi hoon…'
-      : isSpeaking
-        ? 'Main sun rahi hoon…'
-        : isRecognizing
-          ? 'Aapki awaaz ka intezar hai…'
-          : transcript
-            ? 'Awaaz samajh aa gayi'
-            : 'Bolne ke liye button dabayein';
+    : isProcessingNlu
+      ? 'Rozzy NLU samajh rahi hai…'
+      : isAssistantSpeaking
+        ? 'Main jawab de rahi hoon…'
+        : isSpeaking
+          ? 'Main sun rahi hoon…'
+          : isRecognizing
+            ? 'Aapki awaaz ka intezar hai…'
+            : transcript
+              ? 'Awaaz samajh aa gayi'
+              : 'Bolne ke liye button dabayein';
 
   const detailText = message || (
     transcript ||
@@ -324,7 +510,7 @@ export default function VoiceScreen() {
           <EnergyCore
             audioLevel={isAssistantSpeaking ? 0.65 : audioLevel}
             isListening={
-              (isRecognizing && isSpeaking) || isAssistantSpeaking
+              (isRecognizing && isSpeaking) || isAssistantSpeaking || isProcessingNlu
             }
           />
 
@@ -370,7 +556,7 @@ export default function VoiceScreen() {
 
           <Pressable
             onPress={handleMicrophonePress}
-            disabled={isStarting || isAssistantSpeaking}
+            disabled={isStarting || isAssistantSpeaking || isProcessingNlu}
             accessibilityLabel={
               isRecognizing ? 'Listening band karein' : 'Baat shuru karein'
             }
@@ -378,7 +564,7 @@ export default function VoiceScreen() {
               styles.stopButton,
               isRecognizing && styles.recordingButton,
               pressed && styles.pressed,
-              (isStarting || isAssistantSpeaking) && styles.disabledButton,
+              (isStarting || isAssistantSpeaking || isProcessingNlu) && styles.disabledButton,
             ]}
           >
             {isRecognizing ? (
@@ -391,7 +577,7 @@ export default function VoiceScreen() {
           <Pressable
             onPress={() =>
               setMessage(
-                'Center microphone button dabayein aur bolna shuru karein.',
+                'Center microphone button dabayein aur bolna shuru karein. Maslan: "Do kilo cheeni aur aik litre doodh".',
               )
             }
             accessibilityLabel="Madad"

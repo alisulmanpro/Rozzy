@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@react-native-vector-icons/ionicons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import Screen from '@/shared/components/Screen';
 import SegmentedControl from '@/shared/components/SegmentedControl';
@@ -28,6 +28,7 @@ import {
   listCustomers,
   type CustomerRecord,
 } from '@/core/database/repositories/customerRepository';
+import { consumePendingCartItems } from '@/shared/utils/pendingCartBridge';
 import {
   colors,
   fonts,
@@ -80,31 +81,48 @@ export default function BillScreen() {
     }
   }, [search, customerSearch]);
 
-  useEffect(() => {
-    let cancelled = false;
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
 
-    Promise.all([
-      listProducts(search),
-      listCustomers(customerSearch),
-    ])
-      .then(([productRows, customerRows]) => {
-        if (cancelled) return;
-        setError('');
-        setProducts(productRows);
-        setCustomers(customerRows);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Data load nahi ho saka.');
-      })
-      .finally(() => {
-        if (cancelled === false) setLoading(false);
-      });
+      void loadData();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [search, customerSearch]);
+      const importPendingVoiceItems = async () => {
+        const pendingItems = await consumePendingCartItems();
+        if (!active || pendingItems.length === 0) return;
+
+        setCart((current) => {
+          let updated = [...current];
+
+          for (const pending of pendingItems) {
+            const existingIndex = updated.findIndex((i) => i.product.id === pending.product.id);
+            if (existingIndex >= 0) {
+              const currentQty = parseAmount(updated[existingIndex].quantity);
+              const newQty = currentQty + pending.quantity;
+              updated[existingIndex] = {
+                ...updated[existingIndex],
+                quantity: String(newQty),
+              };
+            } else {
+              updated.push({
+                product: pending.product,
+                quantity: String(pending.quantity),
+                unitPrice: String(pending.unitPrice),
+              });
+            }
+          }
+
+          return updated;
+        });
+      };
+
+      void importPendingVoiceItems();
+
+      return () => {
+        active = false;
+      };
+    }, [loadData]),
+  );
 
   const subtotal = useMemo(
     () =>
@@ -122,24 +140,11 @@ export default function BillScreen() {
   const outstanding = Math.max(0, total - paid);
 
   const addProduct = (product: ProductRecord) => {
-    if (product.stockQuantity <= 0) {
-      Alert.alert('Stock available nahi', `${product.name} ka stock khatam hai.`);
-      return;
-    }
-
     setCart((current) => {
       const existing = current.find((item) => item.product.id === product.id);
 
       if (existing) {
         const nextQuantity = parseAmount(existing.quantity) + 1;
-
-        if (nextQuantity > product.stockQuantity) {
-          Alert.alert(
-            'Stock limit',
-            `Available stock: ${product.stockQuantity} ${product.unit}.`,
-          );
-          return current;
-        }
 
         return current.map((item) =>
           item.product.id === product.id
@@ -176,12 +181,44 @@ export default function BillScreen() {
     setCart((current) => current.filter((item) => item.product.id !== productId));
   };
 
+  const executeSaveBill = async () => {
+    try {
+      setSaving(true);
+      const bill = await createBill({
+        items: cart.map((item) => ({
+          productId: item.product.id,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+        })),
+        customerId: selectedCustomer?.id ?? null,
+        discount: discountValue,
+        paidAmount: paid,
+        paymentMethod: paid > 0 ? paymentMethod : null,
+      });
+
+      router.replace({
+        pathname: '/bill-done',
+        params: { billId: bill.id },
+      });
+    } catch (err) {
+      Alert.alert(
+        'Bill save nahi hua',
+        err instanceof Error ? err.message : 'Koi masla aa gaya. Dobara try karein.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveBill = async () => {
     if (saving) return;
     if (cart.length === 0) {
       Alert.alert('Bill khaali hai', 'Pehle kam az kam ek product add karein.');
       return;
     }
+
+    const insufficientItems: { name: string; requested: number; available: number; unit: string }[] = [];
+
     for (const item of cart) {
       const quantity = Number(item.quantity);
 
@@ -194,11 +231,12 @@ export default function BillScreen() {
       }
 
       if (quantity > item.product.stockQuantity) {
-        Alert.alert(
-          'Stock available nahi',
-          `${item.product.name} ka available stock ${item.product.stockQuantity} ${item.product.unit} hai.`,
-        );
-        return;
+        insufficientItems.push({
+          name: item.product.name,
+          requested: quantity,
+          available: item.product.stockQuantity,
+          unit: item.product.unit,
+        });
       }
 
       const unitPrice = Number(item.unitPrice);
@@ -229,32 +267,31 @@ export default function BillScreen() {
       return;
     }
 
-    try {
-      setSaving(true);
-      const bill = await createBill({
-        items: cart.map((item) => ({
-          productId: item.product.id,
-          quantity: Number(item.quantity),
-          unitPrice: Number(item.unitPrice),
-        })),
-        customerId: selectedCustomer?.id ?? null,
-        discount: discountValue,
-        paidAmount: paid,
-        paymentMethod: paid > 0 ? paymentMethod : null,
-      });
+    if (insufficientItems.length > 0) {
+      const details = insufficientItems
+        .map(
+          (i) =>
+            `• ${i.name}: Chahiye ${i.requested} ${i.unit} (Available: ${i.available} ${i.unit})`,
+        )
+        .join('\n');
 
-      router.replace({
-        pathname: '/bill-done',
-        params: { billId: bill.id },
-      });
-    } catch (err) {
       Alert.alert(
-        'Bill save nahi hua',
-        err instanceof Error ? err.message : 'Koi masla aa gaya. Dobara try karein.',
+        'Kam Stock Ki Wazahat / Stock Kam Hai',
+        `Mandarja zail products ka stock kam/khatam hai:\n\n${details}\n\nKya aap negative stock ke sath bill save karna chahte hain?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Haan, Save Karein',
+            onPress: () => {
+              void executeSaveBill();
+            },
+          },
+        ],
       );
-    } finally {
-      setSaving(false);
+      return;
     }
+
+    await executeSaveBill();
   };
 
   return (
@@ -272,8 +309,18 @@ export default function BillScreen() {
             <Pressable onPress={() => router.back()} style={styles.backButton}>
               <Ionicons name="chevron-back" size={24} color={colors.ink} />
             </Pressable>
-            <Text style={styles.headerTitle}>Naya Bill</Text>
-            <Text style={styles.headerCaption}>Manual billing</Text>
+            <View style={styles.headerTitleGroup}>
+              <Text style={styles.headerTitle}>Naya Bill</Text>
+              <Text style={styles.headerCaption}>Manual billing</Text>
+            </View>
+            <Pressable
+              onPress={() => router.push('/voice')}
+              style={styles.voiceButton}
+              accessibilityRole="button"
+              accessibilityLabel="Voice billing"
+            >
+              <Ionicons name="mic" size={20} color={colors.white} />
+            </Pressable>
           </View>
 
           <Text style={styles.sectionTitle}>Products</Text>
@@ -311,18 +358,22 @@ export default function BillScreen() {
                   <View style={styles.productInfo}>
                     <Text style={styles.productName}>{product.name}</Text>
                     <Text style={styles.productMeta}>
-                      {formatMoney(product.price)} / {product.unit} · Stock: {product.stockQuantity}
+                      {formatMoney(product.price)} / {product.unit} · Stock:{' '}
+                      <Text
+                        style={[
+                          styles.stockHighlight,
+                          product.stockQuantity < 0 && styles.negativeStock,
+                          product.stockQuantity === 0 && styles.zeroStock,
+                        ]}
+                      >
+                        {product.stockQuantity}
+                      </Text>
                     </Text>
                   </View>
                   <Pressable
                     onPress={() => addProduct(product)}
-                    disabled={product.stockQuantity <= 0}
-                    style={[
-                      styles.addButton,
-                      product.stockQuantity <= 0 && styles.addButtonDisabled,
-                    ]}
+                    style={styles.addButton}
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: product.stockQuantity <= 0 }}
                   >
                     <Ionicons name="add" size={22} color={colors.white} />
                   </Pressable>
@@ -376,6 +427,18 @@ export default function BillScreen() {
                       </Text>
                     </View>
                   </View>
+                  {parseAmount(item.quantity) > item.product.stockQuantity && (
+                    <View style={styles.stockWarningBox}>
+                      <Ionicons name="alert-circle-outline" size={16} color="#DC2626" />
+                      <Text style={styles.stockWarningText}>
+                        Stock se zyada quantity hai ·{' '}
+                        {item.product.stockQuantity <= 0
+                          ? `Abhi stock available nahi hai (${item.product.stockQuantity} ${item.product.unit})`
+                          : `Available: ${item.product.stockQuantity} ${item.product.unit}`}{' '}
+                        (Maangi gayi: {item.quantity || 0} {item.product.unit})
+                      </Text>
+                    </View>
+                  )}
                 </View>
               ))}
             </View>
@@ -519,8 +582,10 @@ const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xl, paddingHorizontal: spacing.xl, gap: spacing.md },
   topBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   backButton: { width: 40, height: 44, justifyContent: 'center' },
-  headerTitle: { flex: 1, color: colors.ink, fontFamily: fonts.heading, fontSize: fontSizes.heading, fontWeight: fontWeights.bold },
+  headerTitleGroup: { flex: 1 },
+  headerTitle: { color: colors.ink, fontFamily: fonts.heading, fontSize: fontSizes.heading, fontWeight: fontWeights.bold },
   headerCaption: { color: colors.textCaption, fontFamily: fonts.body, fontSize: fontSizes.caption },
+  voiceButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.violet, alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { color: colors.ink, fontFamily: fonts.heading, fontSize: fontSizes.bodyLarge, fontWeight: fontWeights.semibold, marginTop: spacing.sm },
   searchBox: { height: 48, borderWidth: 1, borderColor: colors.borderInput, borderRadius: radii.md, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: spacing.md },
   searchInput: { flex: 1, color: colors.ink, fontFamily: fonts.body, fontSize: fontSizes.body },
@@ -556,6 +621,28 @@ const styles = StyleSheet.create({
   discountInput: { width: 110, height: 38, borderWidth: 1, borderColor: colors.borderInput, borderRadius: radii.sm, paddingHorizontal: spacing.sm, textAlign: 'right', color: colors.ink },
   totalLabel: { color: colors.ink, fontFamily: fonts.heading, fontSize: fontSizes.bodyLarge, fontWeight: fontWeights.bold },
   totalAmount: { color: colors.ink, fontFamily: fonts.heading, fontSize: fontSizes.title, fontWeight: fontWeights.bold },
+  stockHighlight: { fontFamily: fonts.body, fontWeight: fontWeights.medium },
+  negativeStock: { color: '#DC2626', fontWeight: fontWeights.bold },
+  zeroStock: { color: colors.orangeText },
+  stockWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    marginTop: 2,
+  },
+  stockWarningText: {
+    flex: 1,
+    color: '#DC2626',
+    fontFamily: fonts.body,
+    fontSize: 12,
+    fontWeight: fontWeights.medium,
+  },
   outstanding: { color: colors.orangeText },
   footer: { backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.borderCard, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   saveButton: { height: 54, backgroundColor: colors.violet, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center' },

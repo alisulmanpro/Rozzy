@@ -7,6 +7,21 @@ import { getActiveShop } from './shopRepository';
 
 export type BillPaymentMethod = 'cash' | 'bank' | 'other';
 
+export type StockMovementType = 'sale' | 'restock' | 'adjustment' | 'return';
+
+export type StockMovementRecord = {
+  id: string;
+  shop_id: string;
+  product_id: string;
+  bill_id: string | null;
+  movement_type: StockMovementType;
+  quantity: number;
+  previous_stock: number;
+  resulting_stock: number;
+  notes: string | null;
+  created_at: string;
+};
+
 export type BillPaymentStatus = 'paid' | 'partial' | 'udhaar';
 
 export type CreateBillItemInput = {
@@ -226,12 +241,6 @@ export async function createBill(
           );
         }
 
-        if (product.stock_quantity < item.quantity) {
-          throw new Error(
-            `Insufficient stock for ${product.name}. Available: ${product.stock_quantity} ${product.unit}.`,
-          );
-        }
-
         productId = product.id;
         productName = product.name;
         unit = product.unit;
@@ -346,11 +355,17 @@ export async function createBill(
 
     for (const item of preparedItems) {
       if (item.productId) {
-        const stockUpdate = await db.runAsync(
+        // Atomically deduct stock and retrieve exact instantaneous previous and resulting stock
+        const stockResult = await db.getFirstAsync<{
+          resulting_stock: number;
+          previous_stock: number;
+        }>(
           `UPDATE products
            SET stock_quantity = stock_quantity - ?, updated_at = ?
            WHERE id = ? AND shop_id = ? AND is_active = 1
-             AND stock_quantity >= ?`,
+           RETURNING
+             stock_quantity AS resulting_stock,
+             (stock_quantity + ?) AS previous_stock`,
           item.quantity,
           now,
           item.productId,
@@ -358,11 +373,28 @@ export async function createBill(
           item.quantity,
         );
 
-        if (stockUpdate.changes !== 1) {
+        if (!stockResult) {
           throw new Error(
-            `Stock changed while billing ${item.productName}. Please try again.`,
+            `Product ${item.productName} is unavailable or changed while billing. Please try again.`,
           );
         }
+
+        // Record stock movement audit trail entry with concurrency-safe values
+        await db.runAsync(
+          `INSERT INTO stock_movements (
+            id, shop_id, product_id, bill_id, movement_type,
+            quantity, previous_stock, resulting_stock, notes, created_at
+          ) VALUES (?, ?, ?, ?, 'sale', ?, ?, ?, ?, ?)`,
+          randomUUID(),
+          shopId,
+          item.productId,
+          billId,
+          -item.quantity,
+          stockResult.previous_stock,
+          stockResult.resulting_stock,
+          `Sale in Bill #${billNumber}`,
+          now,
+        );
       }
 
       await db.runAsync(

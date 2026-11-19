@@ -15,9 +15,11 @@ import Screen from '@/shared/components/Screen';
 import SearchBar from '@/shared/components/SearchBar';
 import {
   deleteProduct,
+  ensureShopCatalogueSeeded,
   listProducts,
   type ProductRecord,
 } from '@/core/database/repositories/productRepository';
+import { getActiveShop } from '@/core/database/repositories/shopRepository';
 import {
   colors,
   fonts,
@@ -37,7 +39,16 @@ export default function ProductsScreen() {
     try {
       setError('');
       setIsLoading(true);
-      const result = await listProducts(query);
+      let result = await listProducts(query);
+      if (result.length === 0 && !query) {
+        const shop = await getActiveShop();
+        if (shop) {
+          const seeded = await ensureShopCatalogueSeeded(shop.id);
+          if (seeded > 0) {
+            result = await listProducts(query);
+          }
+        }
+      }
       setProducts(result);
     } catch (err) {
       console.error('Products load error:', err);
@@ -55,7 +66,16 @@ export default function ProductsScreen() {
         try {
           setError('');
           setIsLoading(true);
-          const result = await listProducts(query);
+          let result = await listProducts(query);
+          if (result.length === 0 && !query) {
+            const shop = await getActiveShop();
+            if (shop) {
+              const seeded = await ensureShopCatalogueSeeded(shop.id);
+              if (seeded > 0) {
+                result = await listProducts(query);
+              }
+            }
+          }
 
           if (isActive) setProducts(result);
         } catch (err) {
@@ -192,6 +212,15 @@ function ProductCard({
         <View style={styles.cardPricing}>
           <Text style={styles.cardPrice}>{`Rs ${product.price}`}</Text>
           <Text style={styles.cardUnit}>{`per ${product.unit}`}</Text>
+          <Text
+            style={[
+              styles.cardStock,
+              product.stockQuantity < 0 && styles.negativeStock,
+              product.stockQuantity === 0 && styles.zeroStock,
+            ]}
+          >
+            {`Stock: ${product.stockQuantity} ${product.unit}`}
+          </Text>
         </View>
       </View>
 
@@ -309,6 +338,20 @@ const styles = StyleSheet.create({
     color: colors.textCaption,
     fontFamily: fonts.body,
     fontSize: 12,
+  },
+  cardStock: {
+    color: colors.textCaption,
+    fontFamily: fonts.body,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  negativeStock: {
+    color: '#DC2626',
+    fontWeight: fontWeights.bold,
+  },
+  zeroStock: {
+    color: colors.orangeText,
+    fontWeight: fontWeights.medium,
   },
   actionsRow: {
     borderTopColor: colors.borderCard,

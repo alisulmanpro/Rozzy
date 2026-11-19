@@ -86,10 +86,7 @@ function validateProduct(input: CreateProductInput): void {
     throw new Error('Enter a valid product price.');
   }
 
-  if (
-    !Number.isFinite(input.stockQuantity ?? 0) ||
-    (input.stockQuantity ?? 0) < 0
-  ) {
+  if (!Number.isFinite(input.stockQuantity ?? 0)) {
     throw new Error('Enter a valid stock quantity.');
   }
 
@@ -278,3 +275,9 @@ export async function deleteProduct(productId: string): Promise<void> {
     throw new Error('Product not found in the active shop.');
   }
 }
+
+export {
+  seedShopCatalogue,
+  isShopCatalogueSeeded,
+  ensureShopCatalogueSeeded,
+} from './catalogueSeeder';

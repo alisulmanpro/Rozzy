@@ -1,6 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 
 import { getDatabase } from '../database';
+import { seedShopCatalogue } from './catalogueSeeder';
 
 const ACTIVE_SHOP_SETTING = 'active_shop_id';
 
@@ -65,6 +66,9 @@ export async function createShop(input: CreateShopInput): Promise<Shop> {
     throw new Error('Shop was saved but could not be retrieved.');
   }
 
+  // Seed the 37 canonical Pakistani grocery products into SQLite for the new shop
+  await seedShopCatalogue(id);
+
   return shop;
 }
 
@@ -116,5 +120,26 @@ export async function setActiveShop(shopId: string): Promise<void> {
     ACTIVE_SHOP_SETTING,
     shopId,
     new Date().toISOString(),
+  );
+}
+
+export async function updateShopLanguage(
+  shopId: string,
+  language: string,
+): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE shops SET language = ?, updated_at = ? WHERE id = ?`,
+    language.trim(),
+    new Date().toISOString(),
+    shopId,
+  );
+}
+
+export async function clearActiveShop(): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `DELETE FROM device_settings WHERE setting_key = ?`,
+    ACTIVE_SHOP_SETTING,
   );
 }

@@ -127,7 +127,7 @@ export default function AddProductScreen() {
       return;
     }
 
-    if (!Number.isFinite(parsedStock) || parsedStock < 0) {
+    if (!Number.isFinite(parsedStock)) {
       setError('Sahi stock quantity enter karein.');
       return;
     }
